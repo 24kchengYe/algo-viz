@@ -1,0 +1,5 @@
+output/
+__pycache__/
+*.pyc
+_generated_scene.py
+*.log
