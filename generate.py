@@ -203,6 +203,107 @@ def render_script(script_path: str, quality="l"):
     return None
 
 
+def render_stitch(script_path: str, quality="m"):
+    """分场景渲染 + ffmpeg 拼接（社区工作流）
+
+    自动发现 .py 文件中所有 Scene 子类，分别渲染，拼接为 final.mp4。
+    """
+    script_path = Path(script_path).resolve()
+    if not script_path.exists():
+        print(f"[algo-viz] File not found: {script_path}")
+        return None
+
+    project_dir = script_path.parent
+    script_name = script_path.stem
+
+    # 从 .py 文件中提取所有 Scene 类名
+    import re
+    source = script_path.read_text(encoding="utf-8")
+    # 匹配 class XxxScene(Scene): 或 class Xxx(StyledScene): 等
+    scene_classes = re.findall(
+        r'^class\s+(Scene\d*_\w+|\w+Scene|\w+)\s*\([^)]*(?:Scene|StyledScene)[^)]*\)',
+        source, re.MULTILINE,
+    )
+    # 也匹配 class Scene1_Name(MovingCameraScene): 等
+    scene_classes += re.findall(
+        r'^class\s+(Scene\d+_\w+)\s*\(',
+        source, re.MULTILINE,
+    )
+    # 去重并保持顺序
+    seen = set()
+    ordered = []
+    for c in scene_classes:
+        if c not in seen:
+            seen.add(c)
+            ordered.append(c)
+    scene_classes = ordered
+
+    if not scene_classes:
+        print(f"[algo-viz] No Scene classes found in {script_path}")
+        return None
+
+    print(f"[algo-viz] Found {len(scene_classes)} scenes: {', '.join(scene_classes)}")
+
+    # 渲染
+    quality_map = {"l": "-ql", "m": "-qm", "h": "-qh", "k": "-qk"}
+    q_flag = quality_map.get(quality, "-qm")
+    q_dir = quality_to_dir(quality)
+
+    cmd = [
+        sys.executable, "-m", "manim", "render",
+        q_flag,
+        str(script_path),
+        *scene_classes,
+    ]
+    print(f"[algo-viz] Rendering: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=str(project_dir))
+
+    if result.returncode != 0:
+        print(f"[algo-viz] Render failed with code {result.returncode}")
+        return None
+
+    # 生成 concat.txt
+    video_dir = project_dir / "media" / "videos" / script_name / q_dir
+    concat_path = project_dir / "concat.txt"
+    concat_lines = []
+    for cls in scene_classes:
+        mp4 = video_dir / f"{cls}.mp4"
+        if mp4.exists():
+            # 用相对路径
+            rel = mp4.relative_to(project_dir)
+            concat_lines.append(f"file '{rel}'")
+        else:
+            print(f"[algo-viz] Warning: {mp4} not found, skipping")
+
+    if not concat_lines:
+        print(f"[algo-viz] No rendered files found")
+        return None
+
+    concat_path.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
+    print(f"[algo-viz] concat.txt: {len(concat_lines)} scenes")
+
+    # ffmpeg 拼接
+    final_path = project_dir / "final.mp4"
+    stitch_cmd = [
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", str(concat_path),
+        "-c", "copy",
+        str(final_path),
+    ]
+    stitch_result = subprocess.run(stitch_cmd, cwd=str(project_dir),
+                                    capture_output=True, text=True)
+
+    if stitch_result.returncode == 0:
+        size_mb = final_path.stat().st_size / (1024 * 1024)
+        print(f"\n[algo-viz] Done! Final video: {final_path} ({size_mb:.1f}MB)")
+        print(f"[algo-viz] Scenes: {len(concat_lines)}")
+        return str(final_path)
+    else:
+        print(f"[algo-viz] ffmpeg stitch failed: {stitch_result.stderr[:200]}")
+        return None
+
+
 def quality_to_dir(quality: str) -> str:
     """质量标记转输出目录名"""
     return {
@@ -247,9 +348,10 @@ def main():
     parser.add_argument("--algo", "-a", help="具体算法（用于排序等）")
     parser.add_argument("--data", "-d", help="输入数据，如 '[5,3,8,1,9,2]'")
     parser.add_argument("--script", help="AI 生成的 JSON 脚本文件路径")
-    parser.add_argument("--quality", "-q", default="l",
+    parser.add_argument("--stitch", help="分场景渲染+拼接: 指定 .py 文件路径")
+    parser.add_argument("--quality", "-q", default="m",
                         choices=["l", "m", "h", "k"],
-                        help="渲染质量: l=480p, m=720p, h=1080p, k=4K")
+                        help="渲染质量: l=480p, m=720p(默认), h=1080p, k=4K")
     parser.add_argument("--list", "-l", action="store_true", help="列出所有可用场景")
     parser.add_argument("--output", "-o", help="输出目录（默认 ./output）")
 
@@ -261,6 +363,10 @@ def main():
 
     if args.list:
         list_scenes()
+        return
+
+    if args.stitch:
+        render_stitch(args.stitch, args.quality)
         return
 
     if args.script:
@@ -276,7 +382,8 @@ def main():
         parser.print_help()
         print("\n示例:")
         print('  python generate.py "快速排序"')
-        print('  python generate.py --scene attention')
+        print('  python generate.py --scene attention -q m')
+        print('  python generate.py --stitch output/my-project/script.py -q m')
         print('  python generate.py --list')
         return
 

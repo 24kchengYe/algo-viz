@@ -409,6 +409,12 @@ class StyledScene(MovingCameraScene):
         """脉冲强调"""
         self.play(Indicate(mob, color=color, scale_factor=scale), run_time=T_NORMAL)
 
+    # ── 字幕 ──────────────────────────────────────────
+
+    def caption(self, text, duration=2):
+        """添加字幕 (渲染后生成 .srt 文件)"""
+        self.add_subcaption(text, duration=duration)
+
     # ── 叙事工具 ──────────────────────────────────────
 
     def show_title(self, title_text, subtitle_text=None):
