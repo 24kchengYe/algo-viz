@@ -141,8 +141,7 @@ def render_preset(scene_key: str, data=None, quality="l"):
             latest = max(mp4_files, key=lambda f: f.stat().st_mtime)
             print(f"\n[algo-viz] Done! Video: {latest}")
             # 自动抽帧
-            extract_frames(str(latest), num_frames=6,
-                           output_dir=video_dir / "_frames")
+            extract_frames(str(latest), output_dir=video_dir / "_frames")
             return str(latest)
         else:
             print(f"\n[algo-viz] Done! Check output in {OUTPUT_DIR}")
@@ -206,8 +205,13 @@ def render_script(script_path: str, quality="l"):
     return None
 
 
-def extract_frames(video_path: str, num_frames=6, output_dir=None):
+def extract_frames(video_path: str, num_frames=None, output_dir=None, interval_sec=3):
     """从视频中均匀抽取关键帧为 PNG，用于渲染后自检。
+
+    帧数策略 (按优先级):
+    - 如果指定了 num_frames，直接用
+    - 否则按 interval_sec 计算: 每 N 秒一帧 (默认 3 秒)
+    - 最少 4 帧，最多 40 帧 (避免太少看不到问题，或太多浪费时间)
 
     返回帧图片路径列表。
     """
@@ -219,6 +223,11 @@ def extract_frames(video_path: str, num_frames=6, output_dir=None):
         output_dir = video_path.parent / "_frames"
     else:
         output_dir = Path(output_dir)
+
+    # 清理旧帧
+    if output_dir.exists():
+        for old in output_dir.glob("*.png"):
+            old.unlink()
     output_dir.mkdir(exist_ok=True)
 
     prefix = video_path.stem
@@ -236,9 +245,15 @@ def extract_frames(video_path: str, num_frames=6, output_dir=None):
     except Exception:
         duration = 60.0
 
+    # 动态计算帧数
+    if num_frames is None:
+        num_frames = max(4, min(40, int(duration / interval_sec)))
+
     # 均匀取时间点
     interval = duration / (num_frames + 1)
     timestamps = [interval * (i + 1) for i in range(num_frames)]
+
+    print(f"[algo-viz] Extracting {num_frames} frames from {duration:.0f}s video (every {interval:.1f}s)")
 
     # 逐帧抽取 (用 -ss 跳转，每帧一次 ffmpeg 调用，可靠)
     frames = []
@@ -357,7 +372,7 @@ def render_stitch(script_path: str, quality="m"):
         print(f"\n[algo-viz] Done! Final video: {final_path} ({size_mb:.1f}MB)")
         print(f"[algo-viz] Scenes: {len(concat_lines)}")
         # 自动抽帧用于自检
-        frames = extract_frames(str(final_path), num_frames=8,
+        frames = extract_frames(str(final_path),
                                  output_dir=project_dir / "_frames")
         return str(final_path)
     else:
