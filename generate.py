@@ -140,6 +140,9 @@ def render_preset(scene_key: str, data=None, quality="l"):
         if mp4_files:
             latest = max(mp4_files, key=lambda f: f.stat().st_mtime)
             print(f"\n[algo-viz] Done! Video: {latest}")
+            # 自动抽帧
+            extract_frames(str(latest), num_frames=6,
+                           output_dir=video_dir / "_frames")
             return str(latest)
         else:
             print(f"\n[algo-viz] Done! Check output in {OUTPUT_DIR}")
@@ -201,6 +204,61 @@ def render_script(script_path: str, quality="l"):
         print(f"\n[algo-viz] Render failed with code {result.returncode}")
 
     return None
+
+
+def extract_frames(video_path: str, num_frames=6, output_dir=None):
+    """从视频中均匀抽取关键帧为 PNG，用于渲染后自检。
+
+    返回帧图片路径列表。
+    """
+    video_path = Path(video_path)
+    if not video_path.exists():
+        return []
+
+    if output_dir is None:
+        output_dir = video_path.parent / "_frames"
+    else:
+        output_dir = Path(output_dir)
+    output_dir.mkdir(exist_ok=True)
+
+    prefix = video_path.stem
+
+    # 获取视频时长 (秒)
+    probe_cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "csv=p=0",
+        str(video_path),
+    ]
+    try:
+        result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
+        duration = float(result.stdout.strip())
+    except Exception:
+        duration = 60.0
+
+    # 均匀取时间点
+    interval = duration / (num_frames + 1)
+    timestamps = [interval * (i + 1) for i in range(num_frames)]
+
+    # 逐帧抽取 (用 -ss 跳转，每帧一次 ffmpeg 调用，可靠)
+    frames = []
+    for i, ts in enumerate(timestamps):
+        out_file = output_dir / f"{prefix}_{i + 1:02d}.png"
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", f"{ts:.2f}",
+            "-i", str(video_path),
+            "-frames:v", "1",
+            "-q:v", "2",
+            str(out_file),
+        ]
+        subprocess.run(cmd, capture_output=True, timeout=30)
+        if out_file.exists():
+            frames.append(str(out_file))
+
+    if frames:
+        print(f"[algo-viz] Extracted {len(frames)} frames to {output_dir}/")
+    return frames
 
 
 def render_stitch(script_path: str, quality="m"):
@@ -298,6 +356,9 @@ def render_stitch(script_path: str, quality="m"):
         size_mb = final_path.stat().st_size / (1024 * 1024)
         print(f"\n[algo-viz] Done! Final video: {final_path} ({size_mb:.1f}MB)")
         print(f"[algo-viz] Scenes: {len(concat_lines)}")
+        # 自动抽帧用于自检
+        frames = extract_frames(str(final_path), num_frames=8,
+                                 output_dir=project_dir / "_frames")
         return str(final_path)
     else:
         print(f"[algo-viz] ffmpeg stitch failed: {stitch_result.stderr[:200]}")

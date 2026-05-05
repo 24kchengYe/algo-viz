@@ -74,6 +74,49 @@ FAST = T_LABEL
 NORMAL = T_NORMAL
 SLOW = T_KEY
 PAUSE = W_STEP
+
+
+# ═══════════════════════════════════════════════════════
+# 高级动画工具
+#
+# rate_func 选用指南:
+#   smooth          — 大部分动画（默认，自然感）
+#   linear          — 匀速运动（机械/精确）
+#   ease_out_back   — 弹性出场（超调后回弹，元素出现时活泼）
+#   ease_out_bounce — 弹跳落地（适合"掉下来"的效果）
+#   rush_into       — 慢→快（加速离开）
+#   rush_from       — 快→慢（减速到达）
+#   there_and_back  — 去了又回来（临时强调）
+#   double_smooth   — 更柔和的 smooth
+# ═══════════════════════════════════════════════════════
+
+def make_bezier_rate_func(p1x, p1y, p2x, p2y):
+    """创建自定义贝塞尔缓动函数 (类似 CSS cubic-bezier)
+
+    用法:
+        my_ease = make_bezier_rate_func(0.34, 1.56, 0.64, 1)  # 弹性
+        self.play(mob.animate.shift(RIGHT), rate_func=my_ease)
+    """
+    def bezier_rate(t):
+        # 简化版三次贝塞尔 (Newton-Raphson 求 t 对应的 x)
+        # B(t) = 3(1-t)^2*t*P1 + 3(1-t)*t^2*P2 + t^3
+        u = t  # 初始猜测
+        for _ in range(8):
+            x = 3 * (1 - u) ** 2 * u * p1x + 3 * (1 - u) * u ** 2 * p2x + u ** 3
+            dx = 3 * (1 - u) ** 2 * p1x + 6 * (1 - u) * u * (p2x - p1x) + 3 * u ** 2 * (1 - p2x)
+            if abs(dx) < 1e-10:
+                break
+            u -= (x - t) / dx
+            u = max(0, min(1, u))
+        y = 3 * (1 - u) ** 2 * u * p1y + 3 * (1 - u) * u ** 2 * p2y + u ** 3
+        return y
+    return bezier_rate
+
+
+# 预制的高级缓动
+EASE_SPRING = make_bezier_rate_func(0.34, 1.56, 0.64, 1)    # 弹簧感(超调回弹)
+EASE_SNAP = make_bezier_rate_func(0.5, 0, 0.1, 1)           # 快速卡入(干脆利落)
+EASE_GENTLE = make_bezier_rate_func(0.4, 0, 0.2, 1)         # 极柔和
 LONG_PAUSE = W_THINK
 
 # ═══════════════════════════════════════════════════════
@@ -482,3 +525,65 @@ class StyledScene(MovingCameraScene):
             LaggedStart(*[Write(m) for m in group], lag_ratio=lag),
             run_time=T_KEY,
         )
+
+    # ── 高级动画 ──────────────────────────────────────
+
+    def bounce_in(self, mob, shift_from=UP * 1.5):
+        """弹性入场 — ease_out_back (超调后回弹)"""
+        mob.shift(shift_from)
+        self.play(
+            mob.animate.shift(-shift_from),
+            rate_func=ease_out_back,
+            run_time=T_KEY,
+        )
+
+    def snap_in(self, mob):
+        """干脆利落入场 — 从 0.3x 放大到 1x"""
+        mob.scale(0.3).set_opacity(0)
+        self.play(
+            mob.animate.scale(1 / 0.3).set_opacity(1),
+            rate_func=EASE_SNAP,
+            run_time=T_NORMAL,
+        )
+
+    def arc_move(self, mob, target_pos, arc_angle=PI / 3, run_time=T_KEY):
+        """弧形移动 — 比直线移动更有动感"""
+        self.play(
+            mob.animate(path_arc=arc_angle).move_to(target_pos),
+            rate_func=smooth,
+            run_time=run_time,
+        )
+
+    def morph(self, source, target, run_time=T_KEY):
+        """平滑变形 — ReplacementTransform + 弧线"""
+        self.play(
+            ReplacementTransform(source, target, path_arc=PI / 4),
+            run_time=run_time,
+        )
+
+    def wave_highlight(self, group, color=ACCENT_YELLOW):
+        """波浪式高亮 — 逐个 Indicate"""
+        self.play(
+            LaggedStart(
+                *[Indicate(m, color=color, scale_factor=1.1) for m in group],
+                lag_ratio=0.08,
+            ),
+            run_time=T_KEY,
+        )
+
+    def typewriter(self, text_mob, run_time=None):
+        """打字机效果 — 仅限 Text 对象"""
+        rt = run_time or max(0.5, len(text_mob.text) * 0.05)
+        self.play(AddTextLetterByLetter(text_mob, time_per_char=0.05), run_time=rt)
+
+    def focus_then_restore(self, mob, scale=0.5, hold=W_THINK):
+        """聚焦 → 停留 → 恢复 (三段式)"""
+        self.zoom_in(mob, scale=scale)
+        self.wait(hold)
+        self.zoom_out()
+
+    def sequence(self, *anim_funcs):
+        """顺序执行多个动画函数 (每个之间有 W_BRIEF 间隔)"""
+        for fn in anim_funcs:
+            fn()
+            self.wait(W_BRIEF)
