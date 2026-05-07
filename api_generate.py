@@ -150,11 +150,87 @@ def load_system_prompt():
 SYSTEM_PROMPT = load_system_prompt()
 
 
+# ── 图片提取 ──
+def extract_images_from_md(md_content: str, md_dir: Path) -> list[tuple[str, str]]:
+    """从 MD 内容中提取图片引用，返回 [(alt_text, base64_data_url), ...]
+
+    支持:
+    - 本地相对路径: ![alt](./images/arch.png)
+    - 本地绝对路径: ![alt](D:/path/to/img.png)
+    - 远程 URL: ![alt](https://example.com/img.png)
+    """
+    import base64
+    import requests as req
+
+    pattern = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+    images = []
+
+    for alt, src in pattern.findall(md_content):
+        src = src.strip()
+        try:
+            img_bytes = None
+            mime = "image/png"
+
+            # 处理 /assets/xxx.png 这种以 / 开头的站内路径
+            if src.startswith("/") and not src.startswith("//"):
+                src = "." + src  # 转成 ./assets/xxx.png
+
+            # 判断类型
+            if src.startswith(("http://", "https://")):
+                # 远程图片
+                print(f"[algo-viz] Downloading image: {src[:80]}...")
+                resp = req.get(src, timeout=30, verify=False)
+                if resp.status_code == 200:
+                    img_bytes = resp.content
+                    # 推断 MIME
+                    ct = resp.headers.get("content-type", "")
+                    if "jpeg" in ct or "jpg" in ct:
+                        mime = "image/jpeg"
+                    elif "gif" in ct:
+                        mime = "image/gif"
+                    elif "webp" in ct:
+                        mime = "image/webp"
+            else:
+                # 本地图片
+                img_path = Path(src) if Path(src).is_absolute() else md_dir / src
+                img_path = img_path.resolve()
+                if img_path.exists():
+                    print(f"[algo-viz] Loading image: {img_path.name}")
+                    img_bytes = img_path.read_bytes()
+                    ext = img_path.suffix.lower()
+                    mime = {
+                        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                        ".png": "image/png", ".gif": "image/gif",
+                        ".webp": "image/webp", ".bmp": "image/bmp",
+                    }.get(ext, "image/png")
+                else:
+                    print(f"[algo-viz] Image not found: {img_path}")
+
+            if img_bytes:
+                b64 = base64.b64encode(img_bytes).decode("ascii")
+                data_url = f"data:{mime};base64,{b64}"
+                images.append((alt or f"image_{len(images)+1}", data_url))
+                size_kb = len(img_bytes) / 1024
+                print(f"[algo-viz]   → {alt or 'image'}: {size_kb:.0f}KB ({mime})")
+
+        except Exception as e:
+            print(f"[algo-viz] Failed to load image {src}: {e}")
+
+    return images
+
+
 def build_prompt(md_content: str, md_path: str) -> list:
-    """构建消息列表"""
-    user_msg = f"""请根据以下学习笔记生成 Manim 教学动画脚本。
+    """构建消息列表（支持多模态：文字 + 图片）"""
+    md_dir = Path(md_path).parent
+
+    # 提取图片
+    images = extract_images_from_md(md_content, md_dir)
+
+    # 构建 user message content
+    text_part = f"""请根据以下学习笔记生成 Manim 教学动画脚本。
 
 文件: {md_path}
+包含 {len(images)} 张图片（架构图/流程图等，请参考图片内容设计动画布局）。
 
 ---
 {md_content}
@@ -164,12 +240,30 @@ def build_prompt(md_content: str, md_path: str) -> list:
 - 覆盖笔记中的所有核心概念
 - 每个主要章节一个 Scene
 - 包含直觉解释、公式推导、数值示例、对比总结
+- 参考笔记中的图片来设计动画的架构图和流程图布局
 - 用 `self.add_subcaption()` 添加字幕
 """
-    return [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_msg},
-    ]
+
+    if images:
+        # 多模态消息: text + images
+        content_parts = [{"type": "text", "text": text_part}]
+        for alt, data_url in images:
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {"url": data_url, "detail": "low"},  # low detail 省 token
+            })
+        print(f"[algo-viz] Built multimodal prompt: text + {len(images)} images")
+        return [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": content_parts},
+        ]
+    else:
+        # 纯文字消息
+        print(f"[algo-viz] Built text-only prompt (no images found)")
+        return [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": text_part},
+        ]
 
 
 def extract_code(response: str) -> str:
