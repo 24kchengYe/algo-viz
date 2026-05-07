@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-algo-viz 主入口：生成算法/技术学习动画
+note2video 主入口：生成算法/技术学习动画
 
 用法:
     # 使用预制模板
@@ -126,9 +126,9 @@ def render_preset(scene_key: str, data=None, quality="l"):
         class_name,
     ]
 
-    print(f"[algo-viz] Rendering: {class_name} from {module_name}.py")
-    print(f"[algo-viz] Command: {' '.join(cmd)}")
-    print(f"[algo-viz] Output: {OUTPUT_DIR}")
+    print(f"[note2video] Rendering: {class_name} from {module_name}.py")
+    print(f"[note2video] Command: {' '.join(cmd)}")
+    print(f"[note2video] Output: {OUTPUT_DIR}")
     print()
 
     result = subprocess.run(cmd, cwd=str(ROOT))
@@ -139,15 +139,15 @@ def render_preset(scene_key: str, data=None, quality="l"):
         mp4_files = list(video_dir.glob("*.mp4")) if video_dir.exists() else []
         if mp4_files:
             latest = max(mp4_files, key=lambda f: f.stat().st_mtime)
-            print(f"\n[algo-viz] Done! Video: {latest}")
+            print(f"\n[note2video] Done! Video: {latest}")
             # 自动抽帧
             extract_frames(str(latest), output_dir=video_dir / "_frames")
             return str(latest)
         else:
-            print(f"\n[algo-viz] Done! Check output in {OUTPUT_DIR}")
+            print(f"\n[note2video] Done! Check output in {OUTPUT_DIR}")
             return str(OUTPUT_DIR)
     else:
-        print(f"\n[algo-viz] Render failed with code {result.returncode}")
+        print(f"\n[note2video] Render failed with code {result.returncode}")
         return None
 
 
@@ -186,7 +186,7 @@ def render_script(script_path: str, quality="l"):
         "GeneratedScene",
     ]
 
-    print(f"[algo-viz] Rendering AI-generated script: {script.get('title', 'Untitled')}")
+    print(f"[note2video] Rendering AI-generated script: {script.get('title', 'Untitled')}")
     result = subprocess.run(cmd, cwd=str(ROOT))
 
     # 清理临时文件
@@ -197,10 +197,10 @@ def render_script(script_path: str, quality="l"):
         mp4_files = list(video_dir.glob("*.mp4")) if video_dir.exists() else []
         if mp4_files:
             latest = max(mp4_files, key=lambda f: f.stat().st_mtime)
-            print(f"\n[algo-viz] Done! Video: {latest}")
+            print(f"\n[note2video] Done! Video: {latest}")
             return str(latest)
     else:
-        print(f"\n[algo-viz] Render failed with code {result.returncode}")
+        print(f"\n[note2video] Render failed with code {result.returncode}")
 
     return None
 
@@ -253,7 +253,7 @@ def extract_frames(video_path: str, num_frames=None, output_dir=None, interval_s
     interval = duration / (num_frames + 1)
     timestamps = [interval * (i + 1) for i in range(num_frames)]
 
-    print(f"[algo-viz] Extracting {num_frames} frames from {duration:.0f}s video (every {interval:.1f}s)")
+    print(f"[note2video] Extracting {num_frames} frames from {duration:.0f}s video (every {interval:.1f}s)")
 
     # 逐帧抽取 (用 -ss 跳转，每帧一次 ffmpeg 调用，可靠)
     frames = []
@@ -272,7 +272,7 @@ def extract_frames(video_path: str, num_frames=None, output_dir=None, interval_s
             frames.append(str(out_file))
 
     if frames:
-        print(f"[algo-viz] Extracted {len(frames)} frames to {output_dir}/")
+        print(f"[note2video] Extracted {len(frames)} frames to {output_dir}/")
     return frames
 
 
@@ -283,7 +283,7 @@ def render_stitch(script_path: str, quality="m"):
     """
     script_path = Path(script_path).resolve()
     if not script_path.exists():
-        print(f"[algo-viz] File not found: {script_path}")
+        print(f"[note2video] File not found: {script_path}")
         return None
 
     project_dir = script_path.parent
@@ -312,10 +312,10 @@ def render_stitch(script_path: str, quality="m"):
     scene_classes = ordered
 
     if not scene_classes:
-        print(f"[algo-viz] No Scene classes found in {script_path}")
+        print(f"[note2video] No Scene classes found in {script_path}")
         return None
 
-    print(f"[algo-viz] Found {len(scene_classes)} scenes: {', '.join(scene_classes)}")
+    print(f"[note2video] Found {len(scene_classes)} scenes: {', '.join(scene_classes)}")
 
     # 渲染
     quality_map = {"l": "-ql", "m": "-qm", "h": "-qh", "k": "-qk"}
@@ -328,11 +328,11 @@ def render_stitch(script_path: str, quality="m"):
         str(script_path),
         *scene_classes,
     ]
-    print(f"[algo-viz] Rendering: {' '.join(cmd)}")
+    print(f"[note2video] Rendering: {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=str(project_dir))
 
     if result.returncode != 0:
-        print(f"[algo-viz] Render failed with code {result.returncode}")
+        print(f"[note2video] Render failed with code {result.returncode}")
         return None
 
     # 生成 concat.txt
@@ -346,14 +346,14 @@ def render_stitch(script_path: str, quality="m"):
             rel = mp4.relative_to(project_dir)
             concat_lines.append(f"file '{rel}'")
         else:
-            print(f"[algo-viz] Warning: {mp4} not found, skipping")
+            print(f"[note2video] Warning: {mp4} not found, skipping")
 
     if not concat_lines:
-        print(f"[algo-viz] No rendered files found")
+        print(f"[note2video] No rendered files found")
         return None
 
     concat_path.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
-    print(f"[algo-viz] concat.txt: {len(concat_lines)} scenes")
+    print(f"[note2video] concat.txt: {len(concat_lines)} scenes")
 
     # ffmpeg 拼接
     final_path = project_dir / "final.mp4"
@@ -369,14 +369,14 @@ def render_stitch(script_path: str, quality="m"):
 
     if stitch_result.returncode == 0:
         size_mb = final_path.stat().st_size / (1024 * 1024)
-        print(f"\n[algo-viz] Done! Final video: {final_path} ({size_mb:.1f}MB)")
-        print(f"[algo-viz] Scenes: {len(concat_lines)}")
+        print(f"\n[note2video] Done! Final video: {final_path} ({size_mb:.1f}MB)")
+        print(f"[note2video] Scenes: {len(concat_lines)}")
         # 自动抽帧用于自检
         frames = extract_frames(str(final_path),
                                  output_dir=project_dir / "_frames")
         return str(final_path)
     else:
-        print(f"[algo-viz] ffmpeg stitch failed: {stitch_result.stderr[:200]}")
+        print(f"[note2video] ffmpeg stitch failed: {stitch_result.stderr[:200]}")
         return None
 
 
@@ -392,7 +392,7 @@ def quality_to_dir(quality: str) -> str:
 
 def list_scenes():
     """列出所有可用场景"""
-    print("\n[algo-viz] 可用场景列表:\n")
+    print("\n[note2video] 可用场景列表:\n")
 
     categories = {}
     for key, (module, cls) in SCENE_REGISTRY.items():
@@ -418,7 +418,7 @@ def list_scenes():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="algo-viz: 算法学习动画生成器")
+    parser = argparse.ArgumentParser(description="note2video: 算法学习动画生成器")
     parser.add_argument("topic", nargs="?", help="主题名称（中文或英文）")
     parser.add_argument("--scene", "-s", help="场景名称")
     parser.add_argument("--algo", "-a", help="具体算法（用于排序等）")
@@ -465,12 +465,12 @@ def main():
 
     scene_key = resolve_scene(scene_name)
     if not scene_key:
-        print(f"[algo-viz] 未找到场景: {scene_name}")
-        print(f"[algo-viz] 使用 --list 查看所有可用场景")
+        print(f"[note2video] 未找到场景: {scene_name}")
+        print(f"[note2video] 使用 --list 查看所有可用场景")
         # 尝试模糊推荐
         suggestions = [k for k in SCENE_REGISTRY if any(c in k for c in scene_name.lower())]
         if suggestions:
-            print(f"[algo-viz] 你是否在找: {', '.join(suggestions)}")
+            print(f"[note2video] 你是否在找: {', '.join(suggestions)}")
         return
 
     render_preset(scene_key, data=args.data, quality=args.quality)

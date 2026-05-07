@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-algo-viz API 模式: MD 文件 → LLM 生成 Manim 代码 → 渲染 → 拼接
+note2video API 模式: MD 文件 → LLM 生成 Manim 代码 → 渲染 → 拼接
 
 不依赖 Claude Code，直接调 OpenRouter / MindCraft / ablai API。
 可被 VS Code 插件、Shell 脚本、或任何外部程序调用。
@@ -89,7 +89,7 @@ def call_llm(messages, model="qwen/qwen3-235b-a22b", platform="openrouter",
 
     cfg = configs[platform]
     if not cfg["key"]:
-        print(f"[algo-viz] ERROR: No API key for {platform}. Set env var or .env")
+        print(f"[note2video] ERROR: No API key for {platform}. Set env var or .env")
         return None
 
     headers = {
@@ -113,7 +113,7 @@ def call_llm(messages, model="qwen/qwen3-235b-a22b", platform="openrouter",
 
     for retry in range(max_retries):
         try:
-            print(f"[algo-viz] Calling {platform}/{model} (attempt {retry + 1})...")
+            print(f"[note2video] Calling {platform}/{model} (attempt {retry + 1})...")
             resp = requests.post(
                 cfg["url"], headers=headers, json=payload,
                 timeout=180, verify=cfg["verify"], proxies=proxies,
@@ -128,12 +128,12 @@ def call_llm(messages, model="qwen/qwen3-235b-a22b", platform="openrouter",
             elif resp.status_code == 429:
                 import time
                 wait = 2 ** (retry + 1)
-                print(f"[algo-viz] Rate limited, waiting {wait}s...")
+                print(f"[note2video] Rate limited, waiting {wait}s...")
                 time.sleep(wait)
             else:
-                print(f"[algo-viz] API error {resp.status_code}: {resp.text[:200]}")
+                print(f"[note2video] API error {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
-            print(f"[algo-viz] Request failed: {e}")
+            print(f"[note2video] Request failed: {e}")
     return None
 
 
@@ -178,7 +178,7 @@ def extract_images_from_md(md_content: str, md_dir: Path) -> list[tuple[str, str
             # 判断类型
             if src.startswith(("http://", "https://")):
                 # 远程图片
-                print(f"[algo-viz] Downloading image: {src[:80]}...")
+                print(f"[note2video] Downloading image: {src[:80]}...")
                 resp = req.get(src, timeout=30, verify=False)
                 if resp.status_code == 200:
                     img_bytes = resp.content
@@ -195,7 +195,7 @@ def extract_images_from_md(md_content: str, md_dir: Path) -> list[tuple[str, str
                 img_path = Path(src) if Path(src).is_absolute() else md_dir / src
                 img_path = img_path.resolve()
                 if img_path.exists():
-                    print(f"[algo-viz] Loading image: {img_path.name}")
+                    print(f"[note2video] Loading image: {img_path.name}")
                     img_bytes = img_path.read_bytes()
                     ext = img_path.suffix.lower()
                     mime = {
@@ -204,17 +204,17 @@ def extract_images_from_md(md_content: str, md_dir: Path) -> list[tuple[str, str
                         ".webp": "image/webp", ".bmp": "image/bmp",
                     }.get(ext, "image/png")
                 else:
-                    print(f"[algo-viz] Image not found: {img_path}")
+                    print(f"[note2video] Image not found: {img_path}")
 
             if img_bytes:
                 b64 = base64.b64encode(img_bytes).decode("ascii")
                 data_url = f"data:{mime};base64,{b64}"
                 images.append((alt or f"image_{len(images)+1}", data_url))
                 size_kb = len(img_bytes) / 1024
-                print(f"[algo-viz]   → {alt or 'image'}: {size_kb:.0f}KB ({mime})")
+                print(f"[note2video]   → {alt or 'image'}: {size_kb:.0f}KB ({mime})")
 
         except Exception as e:
-            print(f"[algo-viz] Failed to load image {src}: {e}")
+            print(f"[note2video] Failed to load image {src}: {e}")
 
     return images
 
@@ -252,14 +252,14 @@ def build_prompt(md_content: str, md_path: str) -> list:
                 "type": "image_url",
                 "image_url": {"url": data_url, "detail": "low"},  # low detail 省 token
             })
-        print(f"[algo-viz] Built multimodal prompt: text + {len(images)} images")
+        print(f"[note2video] Built multimodal prompt: text + {len(images)} images")
         return [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": content_parts},
         ]
     else:
         # 纯文字消息
-        print(f"[algo-viz] Built text-only prompt (no images found)")
+        print(f"[note2video] Built text-only prompt (no images found)")
         return [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": text_part},
@@ -280,7 +280,7 @@ def extract_code(response: str) -> str:
 
 # ── 主流程 ──
 def main():
-    parser = argparse.ArgumentParser(description="algo-viz API 模式: MD → 动画视频")
+    parser = argparse.ArgumentParser(description="note2video API 模式: MD → 动画视频")
     parser.add_argument("md_file", help="Markdown 文件路径")
     parser.add_argument("-q", "--quality", default="m", choices=["l", "m", "h"],
                         help="渲染质量 (默认 m=720p)")
@@ -297,7 +297,7 @@ def main():
 
     md_path = Path(args.md_file).resolve()
     if not md_path.exists():
-        print(f"[algo-viz] File not found: {md_path}")
+        print(f"[note2video] File not found: {md_path}")
         sys.exit(1)
 
     # 输出目录
@@ -307,47 +307,47 @@ def main():
         out_dir = md_path.parent / "_anim" / md_path.stem
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[algo-viz] Input:    {md_path}")
-    print(f"[algo-viz] Output:   {out_dir}")
-    print(f"[algo-viz] Model:    {args.platform}/{args.model}")
+    print(f"[note2video] Input:    {md_path}")
+    print(f"[note2video] Output:   {out_dir}")
+    print(f"[note2video] Model:    {args.platform}/{args.model}")
     print()
 
     # 1. 读取 MD
     md_content = md_path.read_text(encoding="utf-8")
-    print(f"[algo-viz] MD length: {len(md_content)} chars")
+    print(f"[note2video] MD length: {len(md_content)} chars")
 
     # 2. 调 LLM 生成代码
     messages = build_prompt(md_content, str(md_path))
     response = call_llm(messages, model=args.model, platform=args.platform)
 
     if not response:
-        print("[algo-viz] LLM call failed")
+        print("[note2video] LLM call failed")
         sys.exit(1)
 
     code = extract_code(response)
     script_path = out_dir / "script.py"
     script_path.write_text(code, encoding="utf-8")
-    print(f"[algo-viz] Generated: {script_path} ({len(code)} chars)")
+    print(f"[note2video] Generated: {script_path} ({len(code)} chars)")
 
     if args.dry_run:
-        print("[algo-viz] Dry run — skipping render")
+        print("[note2video] Dry run — skipping render")
         return
 
     # 3. 渲染 + 拼接 (复用 generate.py 的 render_stitch)
     gen_script = Path(__file__).parent / "generate.py"
     cmd = [sys.executable, str(gen_script), "--stitch", str(script_path), "-q", args.quality]
-    print(f"[algo-viz] Rendering: {' '.join(cmd)}")
+    print(f"[note2video] Rendering: {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=str(Path(__file__).parent))
 
     if result.returncode == 0:
         final = out_dir / "final.mp4"
         if final.exists():
-            print(f"\n[algo-viz] Done! Video: {final}")
+            print(f"\n[note2video] Done! Video: {final}")
         else:
-            print(f"\n[algo-viz] Render complete. Check {out_dir}")
+            print(f"\n[note2video] Render complete. Check {out_dir}")
     else:
-        print(f"\n[algo-viz] Render failed. Check {script_path} for errors.")
-        print(f"[algo-viz] You can manually fix and re-render:")
+        print(f"\n[note2video] Render failed. Check {script_path} for errors.")
+        print(f"[note2video] You can manually fix and re-render:")
         print(f"  python generate.py --stitch {script_path} -q {args.quality}")
 
 

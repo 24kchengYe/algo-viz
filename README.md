@@ -1,4 +1,4 @@
-# algo-viz — 算法与技术学习动画生成器
+# note2video — 算法与技术学习动画生成器
 
 3Blue1Brown / 漫士沉思录 风格的教学动画，学习算法、数据结构、深度学习原理时一键生成。
 
@@ -15,9 +15,9 @@
 ### 在 Claude Code 中调用
 
 ```
-/algo-viz 快速排序
-/algo-viz Self-Attention 机制
-/algo-viz 位置编码
+/note2video 快速排序
+/note2video Self-Attention 机制
+/note2video 位置编码
 ```
 
 ### 命令行
@@ -45,7 +45,7 @@ python generate.py --list
 ## 架构
 
 ```
-algo-viz/
+note2video/
 ├── generate.py              # CLI 入口 (主题路由 → 场景)
 ├── scenes/
 │   ├── style.py             # 全局风格系统 (配色/字号/组件/StyledScene 基类)
@@ -95,6 +95,6 @@ MIT
 
 ---
 
-![Visitors](https://visitor-badge.laobi.icu/badge?page_id=24kchengYe.algo-viz)
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=24kchengYe.note2video)
 
-[![Star History](https://starchart.cc/24kchengYe/algo-viz.svg)](https://starchart.cc/24kchengYe/algo-viz)
+[![Star History](https://starchart.cc/24kchengYe/note2video.svg)](https://starchart.cc/24kchengYe/note2video)
