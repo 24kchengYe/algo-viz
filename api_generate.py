@@ -138,37 +138,16 @@ def call_llm(messages, model="qwen/qwen3-235b-a22b", platform="openrouter",
 
 
 # ── Prompt 构建 ──
-SYSTEM_PROMPT = """你是一个 Manim Community Edition 动画专家。用户会给你一篇技术学习笔记（Markdown格式），你需要生成一个完整的 Manim Python 脚本来制作教学动画视频。
+def load_system_prompt():
+    """从 prompts/system.md 加载统一的系统提示词"""
+    prompt_path = Path(__file__).parent / "prompts" / "system.md"
+    if prompt_path.exists():
+        return prompt_path.read_text(encoding="utf-8")
+    # fallback
+    return "你是一个 Manim Community Edition 动画专家。生成 3Blue1Brown 风格的教学动画 Python 脚本。只输出代码。"
 
-## 输出要求
 
-只输出 Python 代码，不要任何解释。代码必须：
-
-1. `from manim import *` 开头
-2. 每个概念段落一个 Scene 类，命名为 `Scene1_名称`, `Scene2_名称` 等
-3. 每个 Scene 继承 `Scene` 或 `MovingCameraScene`
-4. 设置 `self.camera.background_color = "#1C1C1C"`
-
-## 3Blue1Brown 风格规范
-
-- 配色: 蓝#58C4DD(主), 黄#FFFF00(强调), 绿#83C167(正确), 红#FC6255(关键)
-- 透明度分层: 主元素0.9, 上下文0.4, 结构线(网格/坐标轴)0.15
-- 用 `Write(text)` 写文字, `Create(shape)` 画形状, `FadeIn(mob, shift=UP*0.3)` 淡入
-- 用 `LaggedStart` 依次出现, 不要一起弹出
-- 每个 `self.play()` 后必须 `self.wait()`
-- 用 `next_to` / `arrange` 布局, 禁止手算坐标
-- 公式用 `MathTex(r"...")`, 中文不放 `\\text{}` 里, 用单独 `Text()`
-- 公式不要跨参数拆分 `\\frac{}`，用单一字符串
-- 重要结论用 `Circumscribe` 或 `Indicate` 强调
-- 每个场景结构: 标题 → 直觉/类比 → 公式/细节 → 总结
-
-## 常见陷阱（必须避免）
-
-- `ease_out_back` 在 ManimCE 0.20 不存在，用 `smooth` 或 `there_and_back`
-- 公式不要用 `to_edge(UP)`，用 `next_to(title, DOWN, buff=0.5)` 避免和标题重叠
-- 图例先 `arrange` + `to_corner(UR)` 定好位置再 `FadeIn`
-- `AddTextLetterByLetter` 只能用于 `Text`，不能用于 `MathTex`
-"""
+SYSTEM_PROMPT = load_system_prompt()
 
 
 def build_prompt(md_content: str, md_path: str) -> list:
