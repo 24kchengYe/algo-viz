@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 _generated_scene.py
 *.log
+.env
+_anim/
